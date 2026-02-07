@@ -1,5 +1,19 @@
+# Python
 __pycache__/
 *.pyc
+*.pyo
+
+# Virtual env
+venv/
 .env
-vectordb/
-data/
+
+# Vector DB / Models
+faiss_index/
+*.bin
+*.pt
+
+# Data files (PDFs)
+#data/
+
+# OS junk
+.DS_Store

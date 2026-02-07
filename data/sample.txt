@@ -1,0 +1,3 @@
+COREP reporting requires banks to disclose capital adequacy.
+Common Equity Tier 1 capital is the highest quality capital.
+Risk weighted assets are used to calculate capital ratios.

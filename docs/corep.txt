@@ -1,0 +1,7 @@
+Own funds represent a bank's capital base.
+They include CET1, AT1, and Tier 2 capital.
+
+Capital Requirements are calculated based on:
+- Credit risk
+- Market risk
+- Operational risk

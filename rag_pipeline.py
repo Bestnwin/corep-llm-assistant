@@ -1,41 +1,81 @@
-from langchain_community.document_loaders import TextLoader
+import os
+
+from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.vectorstores import Chroma
-from langchain_openai import OpenAIEmbeddings
+from langchain_community.vectorstores import FAISS
+from langchain_huggingface import HuggingFaceEmbeddings
 
 
-DATA_PATH = "data/sample.txt"
-DB_PATH = "vectordb"
+DB_PATH = "faiss_index"
+DATA_PATH = "data"
 
 
+# ---------- Load PDFs ----------
+def load_docs():
+    docs = []
+
+    if not os.path.exists(DATA_PATH):
+        print("❌ data/ folder not found")
+        return docs
+
+    for file in os.listdir(DATA_PATH):
+        if file.lower().endswith(".pdf"):
+            print(f"Loading {file}")
+            loader = PyPDFLoader(os.path.join(DATA_PATH, file))
+            docs.extend(loader.load())
+
+    print("DOC COUNT:", len(docs))
+    return docs
+
+
+# ---------- Build Vector Database ----------
 def build_db():
 
-    loader = TextLoader(DATA_PATH)
-    docs = loader.load()
+    documents = load_docs()
 
+    if len(documents) == 0:
+        print("\n⚠️ No PDFs loaded. Put COREP PDFs inside /data")
+        return
+
+    print("Splitting text...")
     splitter = RecursiveCharacterTextSplitter(
-        chunk_size=200,
-        chunk_overlap=20
+        chunk_size=800,
+        chunk_overlap=150
+    )
+    chunks = splitter.split_documents(documents)
+
+    print(f"Created {len(chunks)} chunks")
+
+    print("Creating embeddings...")
+    embeddings = HuggingFaceEmbeddings(
+        model_name="sentence-transformers/all-MiniLM-L6-v2"
     )
 
-    chunks = splitter.split_documents(docs)
+    print("Building FAISS index...")
+    db = FAISS.from_documents(chunks, embeddings)
 
-    vectordb = Chroma.from_documents(
-        chunks,
-        OpenAIEmbeddings(),
-        persist_directory=DB_PATH
+    db.save_local(DB_PATH)
+
+    print("✅ Database built and saved!")
+
+
+# ---------- Query Database ----------
+def query_db(question):
+
+    embeddings = HuggingFaceEmbeddings(
+        model_name="sentence-transformers/all-MiniLM-L6-v2"
     )
 
-    vectordb.persist()
-
-
-def query_db(q):
-
-    vectordb = Chroma(
-        persist_directory=DB_PATH,
-        embedding_function=OpenAIEmbeddings()
+    db = FAISS.load_local(
+        DB_PATH,
+        embeddings,
+        allow_dangerous_deserialization=True
     )
 
-    results = vectordb.similarity_search(q, k=2)
+    results = db.similarity_search(question, k=3)
 
-    return results
+    print("\n🔎 Top Results:\n")
+
+    for r in results:
+        print(r.page_content)
+        print("-" * 60)

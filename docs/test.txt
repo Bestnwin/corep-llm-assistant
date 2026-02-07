@@ -1,0 +1,3 @@
+COREP reporting refers to Common Reporting framework used by banks
+to report capital adequacy, risk exposures, and regulatory metrics
+to supervisors under Basel III requirements.
