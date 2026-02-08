@@ -1,14 +1,21 @@
 import os
+import re
 
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, pipeline
 
 DB_PATH = "faiss_index"
 DATA_PATH = "data"
 
+# ---------- Text Cleaning ----------
+def clean_text(text):
+    text = re.sub(r"\s+", " ", text)
+    text = text.replace("\n", " ")
+    return text
 
 # ---------- Load PDFs ----------
 def load_docs():
@@ -20,62 +27,100 @@ def load_docs():
 
     for file in os.listdir(DATA_PATH):
         if file.lower().endswith(".pdf"):
-            print(f"Loading {file}")
+            print(f"📄 Loading {file}")
             loader = PyPDFLoader(os.path.join(DATA_PATH, file))
-            docs.extend(loader.load())
+            pages = loader.load()
+
+            for p in pages:
+                p.page_content = clean_text(p.page_content)
+
+            docs.extend(pages)
 
     print("DOC COUNT:", len(docs))
     return docs
 
-
 # ---------- Build Vector Database ----------
 def build_db():
-
     documents = load_docs()
 
     if len(documents) == 0:
-        print("\n⚠️ No PDFs loaded. Put COREP PDFs inside /data")
+        print("⚠️ No PDFs loaded")
         return
 
-    print("Splitting text...")
+    print("✂️ Splitting text...")
     splitter = RecursiveCharacterTextSplitter(
-        chunk_size=800,
-        chunk_overlap=150
+        chunk_size=700,
+        chunk_overlap=80,
+        separators=["\n\n", "\n", ".", " ", ""]
     )
-    chunks = splitter.split_documents(documents)
 
+    chunks = splitter.split_documents(documents)
     print(f"Created {len(chunks)} chunks")
 
-    print("Creating embeddings...")
-    embeddings = HuggingFaceEmbeddings(
-        model_name="sentence-transformers/all-MiniLM-L6-v2"
-    )
+    print("🧠 Creating embeddings...")
+    embeddings = HuggingFaceEmbeddings(model_name="BAAI/bge-small-en")
 
-    print("Building FAISS index...")
+    print("📦 Building FAISS index...")
     db = FAISS.from_documents(chunks, embeddings)
-
     db.save_local(DB_PATH)
-
     print("✅ Database built and saved!")
 
-
-# ---------- Query Database ----------
+# ---------- Query + Answer using FLAN-T5 ----------
 def query_db(question):
+    embeddings = HuggingFaceEmbeddings(model_name="BAAI/bge-small-en")
+    db = FAISS.load_local(DB_PATH, embeddings, allow_dangerous_deserialization=True)
 
-    embeddings = HuggingFaceEmbeddings(
-        model_name="sentence-transformers/all-MiniLM-L6-v2"
+    results = db.max_marginal_relevance_search(question, k=4, fetch_k=12)
+
+    # Build context
+    context = "\n\n".join([r.page_content for r in results])
+
+    prompt = f"""
+    You are a helpful assistant. Use the context below to **write a clear, concise, human-readable answer** to the question. 
+    Summarize the key points in full sentences. If the answer is not in the context, respond with "Not found in document".
+
+    Context:
+    {context}
+
+    Question:
+    {question}
+
+    Answer:
+    """
+
+
+    # ---------- FLAN-T5 Small ----------
+    tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-small")
+    model = AutoModelForSeq2SeqLM.from_pretrained("google/flan-t5-small")
+
+    generator = pipeline(
+        "text2text-generation",
+        model=model,
+        tokenizer=tokenizer,
+        device=-1  # CPU
     )
 
-    db = FAISS.load_local(
-        DB_PATH,
-        embeddings,
-        allow_dangerous_deserialization=True
-    )
+    output = generator(prompt, max_new_tokens=128)[0]["generated_text"]
 
-    results = db.similarity_search(question, k=3)
+    print("\n🤖 Answer:\n")
+    print(output.strip())
 
-    print("\n🔎 Top Results:\n")
+    print("\n📚 Sources:")
+    for i, r in enumerate(results, 1):
+        print(f"{i}. Page:", r.metadata.get("page"))
 
-    for r in results:
-        print(r.page_content)
-        print("-" * 60)
+
+if __name__ == "__main__":
+    print("===== COREP RAG Assistant =====")
+    print("1️⃣ Build Database")
+    print("2️⃣ Ask Questions")
+    choice = input("Choose option: ")
+
+    if choice == "1":
+        build_db()
+    elif choice == "2":
+        while True:
+            q = input("\nAsk something (type 'exit' to quit): ")
+            if q.lower() == "exit":
+                break
+            query_db(q)
