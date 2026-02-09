@@ -62,6 +62,28 @@ pip install -r requirements.txt
 ```
 ## 💻 Running from Command Line
 
+💻 CLI Mode — Regulatory Reporting Prototype Workflow
+
+This mode implements the core objective of the PRA prototype.
+
+## Given a natural-language question and scenario description, the CLI:
+
+### 1️⃣ Retrieves relevant PRA Rulebook / COREP instruction text
+### 2️⃣ Generates structured LLM output aligned to a predefined schema
+### 3️⃣ Returns machine-readable data (JSON-style output)
+### 4️⃣ Enables mapping into template extracts
+### 5️⃣ Supports validation or downstream automation
+
+### This mode demonstrates:
+
+- End-to-end regulatory reporting assistance
+
+- Structured data generation for COREP templates
+
+- Audit-friendly traceable outputs
+
+- Prototype feasibility for automation pipelines
+
 ### Build database:
 ```bash
 python main.py
